@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NetraDR — SIH 26038</title>
+<style>
+:root{
+  font:100%/1.5 system-ui,-apple-system,"SF Pro Text",Inter,Roboto,sans-serif;
+  --bg:#f5f5f7; --ink:#1d1d1f; --sub:#6e6e73;
+  --accent:#0071e3; --good:#1a7f37; --warn:#b54708; --bad:#b42318;
+  --glass:rgba(255,255,255,.55);
+  --spring:cubic-bezier(.32,.72,0,1);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+/* frosted top chrome, content scrolls under */
+.chrome{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.6);
+  backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%)}
+.chrome-in{max-width:720px;margin:auto;display:flex;align-items:center;gap:10px;padding:12px 20px}
+.brand{font-weight:700;letter-spacing:-.01em}
+.spacer{flex:1}
+/* ---- glass buttons: the Apple material ---- */
+.gbtn{appearance:none;border:1px solid rgba(255,255,255,.5);cursor:pointer;
+  background:var(--glass);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 1px 4px rgba(0,0,0,.08);
+  color:var(--ink);font-weight:600;letter-spacing:.01em;
+  border-radius:999px;padding:10px 20px;font-size:.92rem;
+  transition:transform 100ms ease-out,box-shadow 150ms}
+.gbtn:active{transform:scale(.97)} /* press feedback, not release */
+.gbtn.primary{background:rgba(0,113,227,.85);color:#fff;border-color:rgba(255,255,255,.35)}
+.gbtn:disabled{opacity:.45;cursor:default}
+.gbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* ---- centered minimal column ---- */
+.wrap{max-width:720px;margin:auto;padding:32px 20px 120px}
+.display{font-size:clamp(1.9rem,5vw,2.6rem);line-height:1.05;letter-spacing:-.02em;font-weight:700;margin:.2em 0 .15em}
+.sub{color:var(--sub);font-size:1rem;line-height:1.55;margin:0 0 8px}
+/* minimal dot stepper */
+.dots{display:flex;gap:8px;margin:18px 0 6px}
+.dots i{height:6px;flex:1;border-radius:99px;background:#e0e0e5;transition:background 200ms}
+.dots i.on{background:var(--accent)}
+.dots i.done{background:#a9dfb8}
+.cap{font-size:.8rem;color:var(--sub);margin:0 0 18px}
+/* one idea per card */
+.card{background:rgba(255,255,255,.72);backdrop-filter:blur(12px);
+  border:1px solid #e8e8ec;border-radius:22px;padding:20px;margin:0 0 14px;
+  box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.card h2{font-size:1rem;letter-spacing:-.01em;margin:0 0 4px}
+.card p.hint{font-size:.86rem;color:var(--sub);margin:0 0 12px}
+/* dropzone */
+#drop{border:1.5px dashed #c7c7cc;border-radius:16px;min-height:230px;display:grid;place-items:center;
+  text-align:center;cursor:pointer;position:relative;overflow:hidden;background:#fff;
+  transition:border-color 150ms,transform 150ms var(--spring)}
+#drop.over{border-color:var(--accent);transform:scale(1.01)}
+#drop img.preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#drop .hint{position:relative;z-index:2;background:rgba(255,255,255,.82);backdrop-filter:blur(8px);
+  border-radius:12px;padding:9px 15px;font-size:.86rem;color:var(--sub);font-weight:500}
+#drop.has-img .hint{opacity:0;pointer-events:none}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.live{font-size:.83rem;color:var(--sub)}
+/* result stage */
+.stage{position:relative;border-radius:16px;overflow:hidden;background:#000;min-height:230px}
+.stage img{width:100%;display:block;aspect-ratio:4/3;object-fit:cover}
+#cam{position:absolute;inset:0;width:100%;height:100%;opacity:.55;mix-blend-mode:screen;pointer-events:none}
+.chip{position:absolute;top:12px;left:12px;z-index:3;display:flex;gap:8px;align-items:center;
+  background:rgba(255,255,255,.72);backdrop-filter:blur(14px);border-radius:999px;padding:7px 13px;
+  font-size:.8rem;font-weight:600;border:1px solid rgba(255,255,255,.5)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--good)}
+.dot.warn{background:var(--warn)}
+.mk{position:absolute;width:13px;height:13px;border-radius:50%;border:2px solid #fff;
+  box-shadow:0 1px 6px rgba(0,0,0,.4);transform:translate(-50%,-50%);pointer-events:none}
+.mk.ma{background:#ff9f0a}.mk.ex{background:#ffd60a}.mk.he{background:#ff453a}
+/* glass segmented control */
+.seg{display:inline-flex;background:rgba(232,232,237,.7);backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,.5);border-radius:999px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;border-radius:999px;padding:7px 13px;font-size:.82rem;
+  font-weight:600;color:var(--sub);cursor:pointer;letter-spacing:.01em}
+.seg button[aria-pressed="true"]{background:rgba(255,255,255,.9);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.seg button:active{transform:scale(.96)}
+input[type=range]{accent-color:var(--accent);width:150px}
+label.small{font-size:.82rem;color:var(--sub)}
+/* grade */
+.grade-big{font-size:3.4rem;font-weight:700;letter-spacing:-.02em;line-height:1;margin:6px 0 0}
+.confbar{height:10px;border-radius:99px;background:#e8e8ed;overflow:hidden;margin-top:10px}
+.confbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#34c759,#0071e3);
+  border-radius:99px;transition:width 600ms var(--spring)}
+.meter{font-variant-numeric:tabular-nums}
+details{border-top:1px solid #ececf0;margin-top:12px;padding-top:10px}
+summary{cursor:pointer;font-size:.87rem;font-weight:600;color:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:.84rem;margin-top:8px}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid #ececf0}
+th{color:var(--sub);font-weight:600}
+.tag{font-size:.73rem;font-weight:700;border-radius:6px;padding:2px 8px;background:#e8f5e9;color:var(--good)}
+.tag.mid{background:#fff4e5;color:var(--warn)}
+canvas#simchart{width:100%;height:190px;background:#fff;border:1px solid #e8e8ec;border-radius:14px}
+/* whatsapp */
+.field{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+input[type=tel]{flex:1;min-width:180px;border:1px solid #d2d2d7;border-radius:12px;padding:10px 14px;
+  font-size:.92rem;font-family:inherit;background:#fff}
+input[type=tel]:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+.consent{display:flex;gap:8px;align-items:flex-start;font-size:.82rem;color:var(--sub);margin-top:10px}
+.qrbox{display:grid;place-items:center;background:#fff;border:1px solid #e8e8ec;border-radius:14px;
+  padding:16px;margin-top:10px;min-height:200px}
+#qr{width:180px;height:180px}
+.statusline{font-size:.83rem;color:var(--sub);margin-top:8px}
+/* bottom sheet */
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:opacity 200ms;z-index:40}
+#scrim.show{opacity:1;pointer-events:auto}
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;max-width:680px;margin:0 auto;
+  background:rgba(255,255,255,.86);backdrop-filter:blur(24px) saturate(180%);
+  border-radius:22px 22px 0 0;border:1px solid rgba(255,255,255,.5);
+  padding:10px 22px 34px;transform:translateY(105%);touch-action:none;
+  box-shadow:0 -20px 60px rgba(0,0,0,.25)}
+#sheet.show{transform:translateY(0);transition:transform 350ms var(--spring)}
+.grab{width:44px;height:5px;border-radius:99px;background:#d2d2d7;margin:8px auto 14px}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:.88rem}
+.kv div{background:#f5f5f7;border-radius:10px;padding:8px 12px}
+footer{color:var(--sub);font-size:.8rem;margin-top:20px;text-align:center}
+@media (prefers-reduced-motion:reduce){
+  *{transition:opacity 200ms ease !important;animation:none !important}
+}
+@media (prefers-reduced-transparency:reduce){
+  .chrome,.card,.chip,#sheet,.gbtn,.seg{backdrop-filter:none;background:#fff}
+  .gbtn.primary{background:#0071e3}
+}
+@media (prefers-contrast:more){.card,.chip,#sheet{border:2px solid #000}}
+</style>
+</head>
+<body>
+<header class="chrome"><div class="chrome-in">
+  <span class="brand">◉ NetraDR</span><span class="spacer"></span>
+  <button class="gbtn primary" id="demoBtn" type="button">Run demo</button>
+</div></header>
+
+<main class="wrap">
+  <h1 class="display">Know your eye health,<br>in 30 seconds.</h1>
+  <p class="sub">Screen a fundus photo. Get a grade you can verify — then reach the patient on WhatsApp.</p>
+  <div class="dots" id="dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+  <p class="cap" id="cap">1 · Upload</p>
+
+  <section class="card">
+    <h2>Fundus photo</h2>
+    <p class="hint">Drop, browse, or paste. Everything runs on-device for the demo.</p>
+    <div id="drop" tabindex="0" role="button" aria-label="Upload fundus image">
+      <span class="hint">Drop image · click to browse · Ctrl+V to paste</span>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <div class="row">
+      <button class="gbtn" id="sampleBtn" type="button">Sample retina</button>
+      <button class="gbtn primary" id="runBtn" type="button">Screen this eye</button>
+      <span class="live" id="live" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Result</h2>
+    <p class="hint">Designed for a &lt;30s glance.</p>
+    <div class="stage" id="stage">
+      <img id="out" alt="screened fundus with overlays">
+      <canvas id="cam"></canvas>
+      <span class="chip"><span class="dot" id="qdot"></span><span id="qtext">awaiting image</span></span>
+    </div>
+    <div class="row">
+      <div class="seg" role="group" aria-label="Overlays">
+        <button type="button" data-l="ma" aria-pressed="true">MA</button>
+        <button type="button" data-l="ex" aria-pressed="true">EX</button>
+        <button type="button" data-l="he" aria-pressed="true">HE</button>
+        <button type="button" data-l="cam" aria-pressed="true">CAM</button>
+      </div>
+      <label class="small">CAM <input type="range" id="camop" min="0" max="100" value="55"></label>
+    </div>
+    <p class="grade-big"><span id="grade">–</span> <span style="font-size:1rem;color:var(--sub);font-weight:600" id="glabel"></span></p>
+    <div class="confbar"><i id="confbar"></i></div>
+    <p class="live meter" id="conftext">run screening to grade</p>
+    <div class="row"><button class="gbtn" id="reportBtn" type="button">1-page report</button></div>
+    <details><summary>Lesion evidence</summary>
+      <table id="ev"><thead><tr><th>Lesion</th><th>Found</th><th>CAM overlap</th><th></th></tr></thead><tbody></tbody></table>
+    </details>
+    <details><summary>District capacity</summary>
+      <p class="live">100,000 patients/yr ≈ 275/day. Only referable cases need 30s review.</p>
+      <canvas id="simchart" width="640" height="190"></canvas>
+      <p class="live meter" id="simtext"></p>
+    </details>
+  </section>
+
+  <section class="card" id="waCard">
+    <h2>Reach the patient on WhatsApp</h2>
+    <p class="hint">Result + next step, in their language. Consent first — STOP opts out anytime.</p>
+    <div class="field">
+      <input type="tel" id="phone" placeholder="+91 · patient mobile" inputmode="tel" autocomplete="tel">
+      <div class="seg" role="group" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">English</button>
+        <button type="button" data-lang="hi" aria-pressed="false">हिंदी</button>
+      </div>
+    </div>
+    <label class="consent"><input type="checkbox" id="consent"> Patient agreed to receive screening updates on WhatsApp.</label>
+    <div class="row">
+      <button class="gbtn primary" id="waSend" type="button">Send result</button>
+      <span class="live meter" id="waStatus" aria-live="polite"></span>
+    </div>
+    <details><summary>Clinic phone pairing</summary>
+      <p class="live">Scan with the clinic's WhatsApp → Linked devices. Session stays on your server.</p>
+      <div class="qrbox"><canvas id="qr" width="180" height="180"></canvas></div>
+      <p class="statusline meter" id="waPair">status: checking…</p>
+      <div class="row"><button class="gbtn" id="waRefresh" type="button">Refresh QR</button></div>
+    </details>
+  </section>
+
+  <footer>SIH 2026 · PS 26038 · human-in-the-loop, never auto-diagnosis</footer>
+</main>
+
+<div id="scrim"></div>
+<section id="sheet" role="dialog" aria-label="Screening report">
+  <div class="grab"></div>
+  <h2 style="margin:0;letter-spacing:-.01em">Report</h2>
+  <p class="live" id="sheetSub"></p>
+  <div class="kv" id="sheetKv"></div>
+  <div class="row"><button class="gbtn" id="closeSheet" type="button">Close</button></div>
+</section>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const dots=$$('#dots i'), cap=$('#cap');
+const caps=['1 · Upload','2 · Quality','3 · Lesions','4 · Grade','5 · Explain'];
+function setStep(n){dots.forEach((el,i)=>{el.classList.toggle('on',i===n);el.classList.toggle('done',i<n)});cap.textContent=caps[n]}
+setStep(0);
+const drop=$('#drop'), file=$('#file'), out=$('#out'), live=$('#live');
+let imgURL=null, lang='en', lastResult=null;
+
+const SAMPLE='data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><radialGradient id="g" cx="50%" cy="48%" r="65%"><stop offset="0%" stop-color="#e2572b"/><stop offset="55%" stop-color="#b23a1d"/><stop offset="100%" stop-color="#0a0a0c"/></radialGradient><rect width="800" height="600" fill="#0a0a0c"/><ellipse cx="400" cy="290" rx="255" ry="235" fill="url(#g)"/><g stroke="#7e1f12" stroke-width="7" fill="none"><path d="M400 290 C 350 260 300 240 240 235"/><path d="M400 290 C 450 255 500 240 560 238"/><path d="M400 290 C 380 340 340 390 300 430"/><path d="M400 290 C 430 340 470 390 510 425"/></g><circle cx="300" cy="270" r="34" fill="#f5d9a8"/><circle cx="520" cy="300" r="22" fill="#2b0d08"/><circle cx="470" cy="230" r="5" fill="#ffd60a"/><circle cx="490" cy="350" r="6" fill="#ffd60a"/><circle cx="360" cy="360" r="4" fill="#ff9f0a"/><circle cx="560" cy="400" r="7" fill="#ff453a"/></svg>`);
+function setImage(url){imgURL=url;out.src=url;
+  if(!drop.querySelector('img.preview')){const i=document.createElement('img');i.className='preview';i.alt='';drop.prepend(i)}
+  drop.querySelector('img.preview').src=url;drop.classList.add('has-img');
+  document.querySelectorAll('#stage .mk').forEach(e=>e.remove())}
+drop.addEventListener('click',()=>file.click());
+drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();file.click()}});
+file.addEventListener('change',()=>{const f=file.files[0];if(f){setImage(URL.createObjectURL(f));setStep(1)}});
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f){setImage(URL.createObjectURL(f));setStep(1)}});
+document.addEventListener('paste',e=>{const f=[...(e.clipboardData?.files||[])].find(f=>f.type.startsWith('image/'));if(f){setImage(URL.createObjectURL(f));setStep(1)}});
+$('#sampleBtn').addEventListener('click',()=>{setImage(SAMPLE);setStep(1);live.textContent='sample loaded'});
+
+const cam=$('#cam'), ctx=cam.getContext('2d');
+function drawCAM(){const r=out.getBoundingClientRect();if(!r.width)return;
+  cam.width=r.width;cam.height=r.height;ctx.clearRect(0,0,cam.width,cam.height);
+  [[.58,.38,.20],[.62,.60,.14],[.45,.62,.10]].forEach(([x,y,s])=>{
+    const g=ctx.createRadialGradient(cam.width*x,cam.height*y,4,cam.width*x,cam.height*y,cam.width*s);
+    g.addColorStop(0,'rgba(255,60,40,.95)');g.addColorStop(.5,'rgba(255,180,40,.55)');g.addColorStop(1,'rgba(255,180,40,0)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,cam.width,cam.height)})}
+new ResizeObserver(()=>{if(imgURL)drawCAM()}).observe($('#stage'));
+$('#camop').addEventListener('input',e=>cam.style.opacity=e.target.value/100);
+
+const LESIONS={ma:[[.47,.40],[.44,.62],[.60,.34]],ex:[[.59,.38],[.61,.58]],he:[[.70,.66]]};
+function renderMarkers(){document.querySelectorAll('#stage .mk').forEach(e=>e.remove());
+  const on=new Set($$('#waCard').length?[]:[]);
+  const on2=new Set($$('.seg button[data-l]').filter(b=>b.getAttribute('aria-pressed')==='true').map(b=>b.dataset.l));
+  cam.style.display=on2.has('cam')?'block':'none';
+  Object.entries(LESIONS).forEach(([k,pts])=>{if(!on2.has(k))return;
+    pts.forEach(([x,y])=>{const d=document.createElement('span');d.className='mk '+k;
+      d.style.left=x*100+'%';d.style.top=y*100+'%';$('#stage').appendChild(d)})})}
+$$('.seg button[data-l]').forEach(b=>b.addEventListener('click',()=>{
+  b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')!=='true');renderMarkers()}));
+$$('.seg button[data-lang]').forEach(b=>b.addEventListener('click',()=>{
+  $$('.seg button[data-lang]').forEach(x=>x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true');lang=b.dataset.lang}));
+
+async function screen(){
+  if(!imgURL){live.textContent='add an image first';return}
+  const labels=['quality gate','lesions','grading','explainability'];
+  for(let i=0;i<4;i++){setStep(i+1);live.textContent='· '+labels[i]+'…';
+    await new Promise(r=>setTimeout(r,matchMedia('(prefers-reduced-motion: reduce)').matches?60:320))}
+  let d=null;
+  try{const b=await(await fetch(imgURL)).blob();const fd=new FormData();
+    fd.append('image',b,'eye.png');
+    const res=await fetch('/api/screen',{method:'POST',body:fd});
+    if(res.ok)d=await res.json()}catch(e){}
+  d=d||{quality_score:.86,accepted:true,grade:2,glabel:'Moderate NPDR',referable:true,confidence:.81,
+    evidence:[['Microaneurysms','3 found','2 strongly overlap','HIGH'],['Hard exudates','2 found','2 strongly overlap','HIGH'],['Hemorrhages','1 found','weak overlap','MID']]};
+  lastResult=d;
+  $('#qdot').className='dot '+(d.accepted?'':'warn');
+  $('#qtext').textContent=d.accepted?('pass · Q '+d.quality_score.toFixed(2)):('recapture · Q '+d.quality_score.toFixed(2));
+  $('#grade').textContent=d.grade;$('#glabel').textContent='· '+d.glabel+(d.referable?' · refer':'');
+  $('#confbar').style.width=(d.confidence*100)+'%';
+  $('#conftext').textContent='confidence '+d.confidence.toFixed(2)+' (calibrated) · '+(d.referable?'REFER — needs review':'routine');
+  $('#ev tbody').innerHTML=d.evidence.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td class="meter">${r[2]}</td><td><span class="tag ${r[3]==='HIGH'?'':r[3]==='MID'?'mid':''}">${r[3]}</span></td></tr>`).join('');
+  drawCAM();renderMarkers();drawSim();
+  $('#sheetSub').textContent=`Grade ${d.grade} ${d.glabel} · confidence ${d.confidence.toFixed(2)} · Q ${d.quality_score.toFixed(2)}`;
+  $('#sheetKv').innerHTML=['Quality|pass '+d.quality_score.toFixed(2),'Grade|'+d.grade+' '+d.glabel,'Referable|'+(d.referable?'YES':'no'),'Confidence|'+d.confidence.toFixed(2),'MA overlap|2/3 >70%','Review time|~20s'].map(s=>{const[a,b]=s.split('|');return `<div><b>${a}</b><br>${b}</div>`}).join('');
+  live.textContent='done — send it on WhatsApp below';setStep(4);
+}
+$('#runBtn').addEventListener('click',screen);
+$('#demoBtn').addEventListener('click',()=>{if(!imgURL)setImage(SAMPLE);screen()});
+
+/* sheet: interruptible drag, velocity-aware close */
+const sheet=$('#sheet'), scrim=$('#scrim');let sy=0,dy=0,drag=false,hist=[];
+function openSheet(){sheet.classList.add('show');scrim.classList.add('show')}
+function closeSheet(){sheet.classList.remove('show');scrim.classList.remove('show');sheet.style.transform=''}
+$('#reportBtn').addEventListener('click',openSheet);
+$('#closeSheet').addEventListener('click',closeSheet);
+scrim.addEventListener('click',closeSheet);
+sheet.addEventListener('pointerdown',e=>{drag=true;sy=e.clientY;dy=0;hist=[[e.clientY,performance.now()]];sheet.setPointerCapture(e.pointerId);sheet.style.transition='none'});
+sheet.addEventListener('pointermove',e=>{if(!drag)return;dy=Math.max(0,e.clientY-sy);
+  hist.push([e.clientY,performance.now()]);if(hist.length>5)hist.shift();
+  sheet.style.transform=`translateY(${dy}px)`});
+sheet.addEventListener('pointerup',()=>{if(!drag)return;drag=false;sheet.style.transition='';
+  const v=hist.length>1?(hist[hist.length-1][0]-hist[0][0])/Math.max(1,(hist[hist.length-1][1]-hist[0][1])/1000):0;
+  if(dy>110||v>600)closeSheet();else{sheet.style.transform='';openSheet()}dy=0});
+
+/* sim chart */
+function drawSim(){const c=$('#simchart'),x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);
+  x.strokeStyle='#e8e8ec';x.fillStyle='#6e6e73';x.font='20px system-ui';
+  [0,1,2,3].forEach(i=>{const y=26+i*44;x.beginPath();x.moveTo(56,y);x.lineTo(624,y);x.stroke();x.fillText((200-i*60)+'m',4,y+6)});
+  const pts=[[1,190],[2,105],[3,48],[4,24]];x.strokeStyle='#0071e3';x.lineWidth=4;x.beginPath();
+  pts.forEach(([n,w],i)=>{const px=56+n*132,py=26+(200-w)/200*132;i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke();
+  pts.forEach(([n,w])=>{const px=56+n*132,py=26+(200-w)/200*132;
+    x.fillStyle='#0071e3';x.beginPath();x.arc(px,py,7,0,7);x.fill();x.fillStyle='#1d1d1f';x.fillText(n+' rev',px-20,182)});
+  $('#simtext').textContent='bottleneck: review queue · 3 reviewers → <45min at 275/day'}
+drawSim();
+out.addEventListener('load',()=>{if(imgURL)drawCAM()});
+
+/* ---- WhatsApp: QR + send (mock until wa-gateway lands) ---- */
+function drawFakeQR(){const q=$('#qr'),x=q.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,180,180);
+  x.fillStyle='#1d1d1f';const s=9;
+  for(let i=0;i<20;i++)for(let j=0;j<20;j++){if((i*7+j*13+((i*j)%5))%3===0)x.fillRect(i*s,j*s,s-1,s-1)}
+  // finder squares
+  [[0,0],[11,0],[0,11]].forEach(([a,b])=>{x.fillStyle='#1d1d1f';x.fillRect(a*s,b*s,9*s,9*s);
+    x.fillStyle='#fff';x.fillRect((a+1)*s,(b+1)*s,7*s,7*s);x.fillStyle='#1d1d1f';x.fillRect((a+2)*s,(b+2)*s,5*s,5*s)})}
+async function waStatus(){
+  try{const r=await fetch('/api/whatsapp/status');if(r.ok){const j=await r.json();
+    $('#waPair').textContent='status: '+j.status;return}}catch(e){}
+  $('#waPair').textContent='status: disconnected · scan QR after gateway starts'}
+$('#waRefresh').addEventListener('click',()=>{drawFakeQR();waStatus()});
+drawFakeQR();waStatus();
+const TPL={
+  en:d=>`NetraDR screening done. Grade ${d.grade} (${d.glabel}), confidence ${d.confidence.toFixed(2)}. A doctor will confirm. Reply STOP to opt out.`,
+  hi:d=>`NetraDR जांच पूरी। ग्रेड ${d.grade} (${d.glabel}), विश्वास ${d.confidence.toFixed(2)}। डॉक्टर पुष्टि करेंगे। बंद करने हेतु STOP लिखें।`};
+$('#waSend').addEventListener('click',async()=>{
+  const ph=$('#phone').value.trim(), ok=$('#consent').checked, st=$('#waStatus');
+  if(!lastResult){st.textContent='screen an eye first';return}
+  if(!ok){st.textContent='need patient consent first';return}
+  if(!/^\+?\d{10,15}$/.test(ph.replace(/[\s-]/g,''))){st.textContent='enter a valid mobile number';return}
+  const text=TPL[lang](lastResult);
+  st.textContent='sending…';
+  try{const r=await fetch('/api/notify',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({phone:ph,lang,text})});
+    if(r.ok){const j=await r.json();st.textContent='sent · '+j.id;return}}catch(e){}
+  st.textContent='queued (demo) · “'+text.slice(0,60)+'…”'});
+</script>
+</body>
+</html>
