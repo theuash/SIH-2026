@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/ venv/
+.pytest_cache/
+
+# Node (wa-gateway)
+wa-gateway/node_modules/
+wa-gateway/auth/          # Baileys session creds — NEVER commit
+wa-gateway/*.log
+
+# Patient data + logs — PII, never commit
+data/*.json
+data/*.jsonl
+!data/.gitkeep
+reports/*.png
+!reports/.gitkeep
+
+# Model weights (large; fetch separately, see README)
+models/*.pth
+models/*.pt
+models/*.onnx
+!models/.gitkeep
+
+# Local env / OS
+.env
+*.tmp
+.DS_Store
+Thumbs.db
