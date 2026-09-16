@@ -28,3 +28,5 @@ models/*.onnx
 *.tmp
 .DS_Store
 Thumbs.db
+
+.opencode/
