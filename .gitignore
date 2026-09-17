@@ -1,3 +1,7 @@
+# Native C++ core build output (rebuilt per machine via setup_native.sh)
+*.so
+native/build/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -9,6 +13,12 @@ __pycache__/
 wa-gateway/node_modules/
 wa-gateway/auth/          # Baileys session creds — NEVER commit
 wa-gateway/*.log
+
+# Datasets (gated downloads, large — see scripts/fetch_datasets.sh)
+data/aptos2019/
+data/drive/
+data/idrid/
+data/messidor2/
 
 # Patient data + logs — PII, never commit
 data/*.json
@@ -30,3 +40,5 @@ models/*.onnx
 Thumbs.db
 
 .opencode/
+
+mine/

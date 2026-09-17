@@ -48,9 +48,13 @@ Flow (5-step rail, <30s review): Upload → Quality → Lesions → Grade → Ex
 API (FastAPI, 5 routes): `POST /api/screen`, `GET /api/report/{id}`, `GET /api/sim`, `GET /api/metrics`, `GET /health`.
 
 ## 5. Validation (M6 claim)
-CNN-only vs features-only vs hybrid on held-out split: sens/spec/AUC for referable (≥2). Compare vs published APTOS/IDRiD benchmarks; pitch = close-to-SOTA + explainable.
+CNN-only vs features-only vs hybrid on sealed APTOS test split: sens/spec/AUC for
+referable DR (grade ≥2). Harness built (`sih_dr/splits.py`, `sih_dr/benchmark.py`,
+`sih_dr/validate_seg.py`, `scripts/fetch_datasets.sh`) — smoke-tested on synthetic
+data; real numbers pending dataset arrival. Arms without artifacts report `pending`,
+never substituted numbers. Pitch = close-to-SOTA + explainable.
 
-## 7. WhatsApp integration (built)
+## 6. WhatsApp integration (built)
 - Provider: Baileys sidecar `wa-gateway/` (QR pairing, free) at `WA_GATEWAY_URL`
   (default `http://127.0.0.1:3001`); `sih_dr/notify_whatsapp.py` abstracts
   `send_text/get_status/get_qr` so Cloud API can replace it without touching routes.
@@ -60,7 +64,7 @@ CNN-only vs features-only vs hybrid on held-out split: sens/spec/AUC for referab
   `data/notify_log.jsonl`. Gateway down → honest `queued-demo` mode, never blocks.
 - Run gateway: `cd wa-gateway && npm i && node server.js`, scan QR via `GET /qr`.
 
-## 8. Backend status (verified 2026-09-16, CPU-only, synthetic fundus)
+## 7. Backend status (verified 2026-09-16, CPU-only, synthetic fundus)
 - `sih_dr/`: `lesion_schema` + M1 classical gate + M2 classical seg (FOV-rim guard,
   bg-referenced MA confidence, sub-pixel centroids) + M3 heuristic hybrid
   (sqrt-compressed burden, T=1.3 calibration, torch-checkpoint hook ready) +
@@ -70,13 +74,27 @@ CNN-only vs features-only vs hybrid on held-out split: sens/spec/AUC for referab
   confidences ~0.4 (honest); all 7 API routes live; `web/index.html` served at `/`.
 - Known limits: thresholds tuned on cartoons — retune on APTOS/IDRiD; vendor
   U-Net + EfficientNet checkpoints not yet dropped into `models/`.
-## 6. Repo layout
+## 8. Repo layout
 ```
 Plan.md
 sih_dr/  m1_quality.py  m2_segment.py  m3_grade.py  m4_explain.py  m5_sim.py
          lesion_schema.py  run_pipeline.py  patients.py  notify_whatsapp.py
+         _native.py + netradr_core*.so (built, gitignored)
+native/  CMakeLists + include/ + src/ (m1/m2/m4/ops) + bindings.cpp
+tests/test_parity.py  (32 C++-vs-Python checks)
 web/index.html
 app.py  (FastAPI: serves web/ + live /api/*)
 wa-gateway/  (Baileys QR sidecar)
 data/patients.json  data/notify_log.jsonl
 ```
+## 9. Native C++ core (built, verified 2026-09-16)
+- `native/` (C++17, zero third-party deps) + `setup_native.sh` → `sih_dr/netradr_core*.so`
+  (gitignored, rebuilt per machine). M1/M2/M4 ported line-for-line (rect kernels —
+  Python twins switched ellipse→rect to match); M3/M5 stay Python (nothing to gain).
+- Tricks that mattered: 3-pass box ≈ big Gaussian (M1), 1/4-res heatmaps (M4),
+  Lab LUTs, block Van Herk + AVX2 windowed min/max morphology, GIL released, zero-copy buffers.
+- `tests/test_parity.py`: 32/32 green (Dice ~0.99 vessels, exact decisions).
+  `NETRADR_IMPL=py` forces Python (MATLAB-port reference stays readable).
+- Honest ceiling: M2 single-image 0.7x of SIMD-tuned OpenCV (ours 58ms vs 40ms) —
+  end-to-end still wins 2.9–4x via M1 (4.9x) + threading. GPU path skipped (CPU target).
+

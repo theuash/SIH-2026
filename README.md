@@ -12,6 +12,20 @@ python app.py                                             # http://127.0.0.1:800
 
 Open the URL, hit **Sample retina → Screen this eye**. No downloads, no data needed.
 
+## Native C++ core (optional, 3x faster)
+
+Pixel work (M1/M2/M4) is C++17 with a Python wrapper — same API, automatic
+fallback to Python when unbuilt. No sudo, no OpenCV C++ needed (dependency-free).
+
+```bash
+./setup_native.sh        # cmake + g++ + pybind11 -> sih_dr/netradr_core*.so
+python tests/test_parity.py   # 32 checks: C++ vs Python twins
+```
+
+Measured on 12-core CPU, 640×480: **448ms → 154ms single image (2.9x)**,
+**14.9s → 4.6s for 24 images 1-thread (3.2x)**, **3.2s → 0.8s on 12 threads (4x)**.
+`NETRADR_IMPL=py` forces the Python path (debug/parity).
+
 ## Other uses
 
 ```bash
@@ -42,6 +56,18 @@ wa-gateway/           # Baileys QR-pairing sidecar (Node)
 Plan.md               # build plan + module reuse map
 files/                # original SIH briefs + per-member contexts
 ```
+
+## Validation (SIH26038 evidence)
+
+```bash
+bash scripts/fetch_datasets.sh   # APTOS auto (needs ~/.kaggle/kaggle.json); rest = browser steps
+python -m sih_dr.splits                      # sealed 80/10/10 APTOS split -> data/splits.json
+python -m sih_dr.benchmark                   # CNN-only vs features-only vs hybrid -> results/benchmark.md
+python -m sih_dr.validate_seg                # DRIVE vessels + IDRiD lesions/OD -> results/seg_metrics.md
+```
+
+The harness is honest-by-construction: arms without their artifact (e.g. no
+`models/` checkpoint) report `pending` with the reason — never a substituted number.
 
 ## Drop in real models (no code change)
 

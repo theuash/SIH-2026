@@ -8,6 +8,8 @@ Classical only (no DL): Laplacian variance + luminance band + FOV contour.
 import cv2
 import numpy as np
 
+from . import _native
+
 # Thresholds tuned on synthetically degraded fundus thumbs; retune on EyeQ/APTOS.
 FOCUS_THR = 28.0          # Laplacian variance on green channel
 DARK_FRAC_THR = 0.25      # allowed underexposed retinal fraction
@@ -19,11 +21,24 @@ FOV_OFF_THR = 0.28        # FOV center offset <=28% of width
 def _retinal_mask(v):
     m = (v > 12).astype(np.uint8) * 255
     m = cv2.morphologyEx(m, cv2.MORPH_CLOSE,
-                         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
+                         cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
     return m > 0
 
 
-def assessAndEnhance(img):
+def _feedback(accepted, focus_ok, illumination_ok, fov_ok):
+    if accepted:
+        return "Accept."
+    reasons = []
+    if not focus_ok:
+        reasons.append("image is blurred — hold the camera steady and refocus")
+    if not illumination_ok:
+        reasons.append("lighting is off (too dark/bright) — adjust illumination")
+    if not fov_ok:
+        reasons.append("retina not fully visible — recenter so the full eye fills the frame")
+    return "Recapture: " + "; ".join(reasons) + "."
+
+
+def _assess_py(img):
     assert img.dtype == np.uint8 and img.ndim == 3 and img.shape[2] == 3, \
         "img must be RGB uint8 HxWx3"
     h, w = img.shape[:2]
@@ -64,22 +79,31 @@ def assessAndEnhance(img):
              min(area / 0.85, 1.0)]
     quality_score = float(round(sum(parts) / 3, 3))
     accepted = bool(focus_ok and illumination_ok and fov_ok)
-
-    reasons = []
-    if not focus_ok:
-        reasons.append("image is blurred — hold the camera steady and refocus")
-    if not illumination_ok:
-        reasons.append("lighting is off (too dark/bright) — adjust illumination")
-    if not fov_ok:
-        reasons.append("retina not fully visible — recenter so the full eye fills the frame")
-    feedback_msg = ("Accept." if accepted
-                    else "Recapture: " + "; ".join(reasons) + ".")
+    feedback_msg = _feedback(accepted, focus_ok, illumination_ok, fov_ok)
 
     enhanced_image = _enhance(img)  # always populated; harmless on good images
     return {"accepted": accepted, "quality_score": quality_score,
             "flags": {"focus_ok": focus_ok, "illumination_ok": illumination_ok,
                       "fov_ok": fov_ok},
             "enhanced_image": enhanced_image, "feedback_msg": feedback_msg}
+
+
+def assessAndEnhance(img):
+    """Dispatch: C++ fast path, Python twin fallback. Same contract."""
+    assert img.dtype == np.uint8 and img.ndim == 3 and img.shape[2] == 3, \
+        "img must be RGB uint8 HxWx3"
+    if _native.want_native():
+        r = _native.mod.m1_assess(np.ascontiguousarray(img))
+        flags = {"focus_ok": bool(r["focus_ok"]),
+                 "illumination_ok": bool(r["illumination_ok"]),
+                 "fov_ok": bool(r["fov_ok"])}
+        accepted = bool(r["accepted"])
+        return {"accepted": accepted,
+                "quality_score": float(round(float(r["quality_score"]), 3)),
+                "flags": flags,
+                "enhanced_image": np.array(r["enhanced"], dtype=np.uint8),
+                "feedback_msg": _feedback(accepted, **flags)}
+    return _assess_py(img)
 
 
 def _enhance(img):

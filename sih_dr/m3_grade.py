@@ -71,6 +71,39 @@ def _try_torch_branch(enh, lf):
         return None
 
 
+def cnn_probs_only(enhanced_image):
+    """Isolated CNN-branch inference for the benchmark's cnn-only arm.
+
+    Returns (probs_1x5, ckpt_name) or (None, reason). Never falls back to the
+    heuristic — callers must report 'pending', not substitute numbers.
+    """
+    ckpts = sorted(MODELS_DIR.glob("*.pth")) + sorted(MODELS_DIR.glob("*.pt"))
+    if not ckpts:
+        return None, "no checkpoint in models/"
+    try:
+        import torch
+        import timm
+        import numpy as np
+        import cv2
+    except Exception as e:
+        return None, f"missing dep: {e}"
+    try:
+        ckpt = torch.load(ckpts[0], map_location="cpu")
+        sd = ckpt.get("model_state_dict", ckpt) if isinstance(ckpt, dict) else None
+        if not isinstance(sd, dict):
+            return None, f"unrecognized checkpoint format: {ckpts[0].name}"
+        model = timm.create_model("efficientnet_b0", pretrained=False, num_classes=5)
+        model.load_state_dict(sd, strict=False)
+        model.eval()
+        x = cv2.resize(enhanced_image, (224, 224))
+        t = torch.from_numpy(x).permute(2, 0, 1).float().div(255)
+        with torch.no_grad():
+            logits = model(t.unsqueeze(0)).squeeze(0).tolist()
+        return _softmax([v / TEMPERATURE for v in logits]), ckpts[0].name
+    except Exception as e:
+        return None, f"inference failed: {e}"
+
+
 def gradeDR(enhanced_image, lesion_features):
     from . import lesion_schema
     lesion_schema.validate(lesion_features)

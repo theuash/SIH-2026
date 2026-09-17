@@ -5,3 +5,4 @@ scikit-learn
 fastapi
 uvicorn
 python-multipart
+pybind11  # native C++ core build only (runtime works without it: Python fallback)

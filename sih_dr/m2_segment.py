@@ -10,6 +10,7 @@ import cv2
 import math
 import numpy as np
 from . import lesion_schema
+from . import _native
 
 
 def _area_open(mask, min_area):
@@ -39,7 +40,7 @@ def _weighted_centroids(mask, gray, bg):
     return out
 
 
-def segmentStructures(enh):
+def _segment_py(enh):
     assert enh.dtype == np.uint8 and enh.ndim == 3
     h, w = enh.shape[:2]
     scale = (h * w) / (512 * 512)  # size-normalize area thresholds
@@ -48,12 +49,12 @@ def segmentStructures(enh):
     L = lab[:, :, 0]
     # interior: eroded retinal mask — FOV rim/top-hat edge artifacts live here
     interior = cv2.erode((L > 12).astype(np.uint8),
-                         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31))).astype(bool)
+                         cv2.getStructuringElement(cv2.MORPH_RECT, (31, 31))).astype(bool)
 
     # --- vessels: top-hat on CLAHE green + length filter ---
     clahe = cv2.createCLAHE(2.0, (8, 8)).apply(green)
     tophat = cv2.morphologyEx(clahe, cv2.MORPH_TOPHAT,
-                              cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
+                              cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9)))
     _, v = cv2.threshold(tophat, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     vessel_mask = _area_open(v > 0, int(60 * scale))
     vessel_density = float(vessel_mask.mean())
@@ -95,17 +96,17 @@ def segmentStructures(enh):
     # --- exudates: bright in L + yellow in b, outside dilated OD ---
     b = lab[:, :, 2].astype(float)
     od_dil = cv2.dilate(od_mask.astype(np.uint8),
-                        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))).astype(bool)
+                        cv2.getStructuringElement(cv2.MORPH_RECT, (21, 21))).astype(bool)
     ex = (L > np.percentile(L, 97.5)) & (b > np.percentile(b, 75)) & (~od_dil) & interior
     exudate_mask = _area_open(ex, int(25 * scale))
 
     # --- dark lesions: small top-hat (MA) vs larger blobs (HE) ---
     small = cv2.morphologyEx(255 - green, cv2.MORPH_TOPHAT,
-                             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
+                             cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7)))
     _, ma_raw = cv2.threshold(small, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     ma_raw = (ma_raw > 0) & (~od_dil) & (~vessel_mask) & interior
     big = cv2.morphologyEx(255 - green, cv2.MORPH_TOPHAT,
-                             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17)))
+                             cv2.getStructuringElement(cv2.MORPH_RECT, (17, 17)))
     _, he_raw = cv2.threshold(big, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     he_raw = (he_raw > 0) & (~od_dil) & interior
 
@@ -125,7 +126,7 @@ def segmentStructures(enh):
 
     # --- neovascularization heuristic: dense fine vessels near OD ---
     ring = cv2.dilate(od_mask.astype(np.uint8),
-                      cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (41, 41))).astype(bool) & ~od_mask
+                      cv2.getStructuringElement(cv2.MORPH_RECT, (41, 41))).astype(bool) & ~od_mask
     ring_density = float(vessel_mask[ring].mean()) if ring.any() else 0.0
     nv_flag = bool(ring_density > 0.18 and (len(ma_cands) + len(he_cands) > 4))
     nv_regions = (ring & vessel_mask) if nv_flag else np.zeros((h, w), bool)
@@ -150,3 +151,44 @@ def segmentStructures(enh):
             "exudate_mask": exudate_mask, "hemorrhage_mask": he_mask,
             "neovascularization_flag": nv_flag, "nv_regions": nv_regions,
             "lesion_features": lesion_features}
+
+
+def _cands_from_np(arr):
+    out = []
+    for row in np.asarray(arr, dtype=float).reshape(-1, 6):
+        x, y, xs, ys, area, conf = (float(v) for v in row)
+        out.append({"x": x, "y": y, "confidence": round(conf, 3),
+                    "x_subpixel": xs, "y_subpixel": ys, "area": int(area)})
+    return out
+
+
+def segmentStructures(enh):
+    """Dispatch: C++ fast path, Python twin fallback. Same contract."""
+    assert enh.dtype == np.uint8 and enh.ndim == 3
+    if _native.want_native():
+        r = _native.mod.m2_segment(np.ascontiguousarray(enh))
+        ma_cands = _cands_from_np(r["ma_cands"])
+        he_cands = _cands_from_np(r["he_cands"])
+        nv_flag = bool(r["nv_flag"])
+        lesion_features = {
+            "ma_count": len(ma_cands), "ma_area": int(r["ma_area"]),
+            "ex_count": int(r["ex_count"]), "ex_area": int(r["ex_area"]),
+            "he_count": len(he_cands), "he_area": int(r["he_area"]),
+            "vessel_density": round(float(r["vessel_density"]), 4),
+            "nv_present": nv_flag}
+        lesion_schema.validate(lesion_features)
+        return {
+            "vessel_mask": np.array(r["vessel_mask"], dtype=bool),
+            "optic_disc": {"mask": np.array(r["od_mask"], dtype=bool),
+                           "centroid": [float(r["od_centroid"][0]),
+                                        float(r["od_centroid"][1])],
+                           "radius": float(r["od_radius"])},
+            "fovea_centroid": [float(r["fovea"][0]), float(r["fovea"][1])],
+            "microaneurysm_map": {"mask": np.array(r["ma_mask"], dtype=bool),
+                                  "candidates": ma_cands},
+            "exudate_mask": np.array(r["ex_mask"], dtype=bool),
+            "hemorrhage_mask": np.array(r["he_mask"], dtype=bool),
+            "neovascularization_flag": nv_flag,
+            "nv_regions": np.array(r["nv_regions"], dtype=bool),
+            "lesion_features": lesion_features}
+    return _segment_py(enh)
